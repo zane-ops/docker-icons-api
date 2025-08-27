@@ -18,6 +18,18 @@ function parseDockerHubImage(
   };
 }
 
+// Ensure table exists
+await sql`
+  CREATE TABLE IF NOT EXISTS icons (
+    id BIGSERIAL PRIMARY KEY,
+    namespace VARCHAR(1000) UNIQUE NOT NULL,
+    url TEXT,
+    content BYTEA,
+    content_type TEXT,
+    updated_at TIMESTAMP DEFAULT NOW()
+  )
+`;
+
 const server = Bun.serve({
   port: import.meta.env.PORT ?? 8936,
   async fetch(req) {
@@ -31,61 +43,60 @@ const server = Bun.serve({
       });
     }
 
-    await sql`
-	CREATE TABLE IF NOT EXISTS icons (
-		    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-			namespace VARCHAR(1000) UNIQUE NOT NULL,
-			url TEXT
-	)
-	`;
-
     const url = new URL(req.url);
     const image = url.searchParams.get("image");
 
     if (!image) {
       return Response.json(
-        {
-          message: "`image` parameter is required"
-        },
+        { message: "`image` parameter is required" },
         { status: 400 }
       );
     }
 
     const parsedImage = parseDockerHubImage(image);
-
     if (!parsedImage) {
       return Response.json(
-        {
-          message: "the image is not a valid docker hub image"
-        },
+        { message: "the image is not a valid docker hub image" },
         { status: 400 }
       );
     }
 
+    // Official dockerhub images → fixed URL
     if (!parsedImage.namespace || parsedImage.namespace === "library") {
-      return fetch(
-        `https://hub.docker.com/api/media/repos_logo/v1/library%2F${parsedImage.repository}?type=logo`
-      );
-    }
-
-    // Check DB for existing thumbnail
-    const result = await sql`
-        SELECT url FROM icons WHERE namespace = ${parsedImage.namespace} LIMIT 1
-      `.values();
-
-    const existingImageUrl = result[0]?.[0];
-    if (existingImageUrl !== undefined) {
-      console.log({
-        existingImageUrl
+      const libUrl = `https://hub.docker.com/api/media/repos_logo/v1/library%2F${parsedImage.repository}?type=logo`;
+      const fresh = await fetch(libUrl);
+      return new Response(await fresh.arrayBuffer(), {
+        headers: {
+          "Content-Type": fresh.headers.get("content-type") ?? "image/png",
+          "Cache-Control": "public, max-age=86400" // 1 day
+        }
       });
-      if (existingImageUrl === null) {
+    }
+    // Try to read from DB cache
+    const [row] = await sql`
+    SELECT url, content, content_type FROM icons
+    WHERE namespace = ${parsedImage.namespace}
+    LIMIT 1
+  `.values();
+
+    if (row) {
+      if (row[0] === null) {
+        // row[0] is url
         return new Response(null, { status: 404 });
       }
-      return fetch(existingImageUrl);
+      if (row[1]) {
+        // row[1] is content
+        return new Response(row[1], {
+          headers: {
+            "Content-Type": row[2] ?? "image/png",
+            "Cache-Control": "public, max-age=86400" // serve cached for 1 day
+          }
+        });
+      }
     }
 
+    // Scrape Docker Hub
     const dockerHubURL = `https://hub.docker.com/r/${parsedImage.namespace}/${parsedImage.repository}`;
-
     const browser = await chromium.launch();
     const page = await browser.newPage();
     const res = await page.goto(dockerHubURL);
@@ -97,9 +108,7 @@ const server = Bun.serve({
       try {
         const el = await page.waitForSelector(
           '[data-testid="repository-logo"]',
-          {
-            timeout: 5_000
-          }
+          { timeout: 5000 }
         );
         imageSrc = await el.getAttribute("src");
       } catch {
@@ -109,25 +118,47 @@ const server = Bun.serve({
       message = `Image \`${parsedImage.namespace}/${parsedImage.repository}\` does not exist on Docker Hub`;
     }
 
-    await Promise.all([
-      browser.close(),
-      sql`
-	     INSERT INTO icons (namespace, url)
-  	     VALUES (${parsedImage.namespace}, ${imageSrc})
-  	     ON CONFLICT (namespace) DO NOTHING
-  	  `
-    ]);
+    await browser.close();
 
     if (!imageSrc) {
+      await sql`
+      INSERT INTO icons (namespace, url, content, content_type)
+      VALUES (${parsedImage.namespace}, NULL, NULL, NULL)
+      ON CONFLICT (namespace) DO UPDATE SET url = NULL
+    `;
+      return Response.json({ message }, { status: 404 });
+    }
+
+    // Fetch actual image
+    const fresh = await fetch(imageSrc);
+    if (!fresh.ok) {
       return Response.json(
-        { message },
-        {
-          status: 404
-        }
+        { message: "failed to fetch logo" },
+        { status: 502 }
       );
     }
 
-    return fetch(imageSrc);
+    const buf = Buffer.from(await fresh.arrayBuffer());
+    const contentType = fresh.headers.get("content-type") ?? "image/png";
+
+    // Store in DB
+    await sql`
+    INSERT INTO icons (namespace, url, content, content_type)
+    VALUES (${parsedImage.namespace}, ${imageSrc}, ${buf}, ${contentType})
+    ON CONFLICT (namespace) DO UPDATE SET
+      url = excluded.url,
+      content = excluded.content,
+      content_type = excluded.content_type,
+      updated_at = NOW()
+  `;
+
+    // Return with cache headers
+    return new Response(buf, {
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400" // 1 day cache
+      }
+    });
   }
 });
 
