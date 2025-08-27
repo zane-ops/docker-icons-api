@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import { sql } from "bun";
 import { chromium } from "playwright";
 
 function parseDockerHubImage(
@@ -31,13 +31,13 @@ const server = Bun.serve({
       });
     }
 
-    using db = new Database("db.sqlite", { create: true, strict: true });
-    db.run(`
-  CREATE TABLE IF NOT EXISTS icons (
-    namespace TEXT PRIMARY KEY,
-    url TEXT
-  )
-`);
+    await sql`
+	CREATE TABLE IF NOT EXISTS icons (
+		    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+			namespace VARCHAR(1000) UNIQUE NOT NULL,
+			url TEXT
+	)
+	`;
 
     const url = new URL(req.url);
     const image = url.searchParams.get("image");
@@ -69,15 +69,20 @@ const server = Bun.serve({
     }
 
     // Check DB for existing thumbnail
-    const existingThumbnail = db
-      .query<{ url: string }, { namespace: string }>(
-        "SELECT url FROM icons WHERE namespace = $namespace LIMIT 1"
-      )
-      .get({
-        namespace: parsedImage.namespace
-      });
+    const result = await sql`
+        SELECT url FROM icons WHERE namespace = ${parsedImage.namespace} LIMIT 1
+      `.values();
 
-    if (existingThumbnail) return fetch(existingThumbnail.url);
+    const existingImageUrl = result[0]?.[0];
+    if (existingImageUrl !== undefined) {
+      console.log({
+        existingImageUrl
+      });
+      if (existingImageUrl === null) {
+        return new Response(null, { status: 404 });
+      }
+      return fetch(existingImageUrl);
+    }
 
     const dockerHubURL = `https://hub.docker.com/r/${parsedImage.namespace}/${parsedImage.repository}`;
 
@@ -88,28 +93,30 @@ const server = Bun.serve({
     let imageSrc: string | null = null;
     let message = "Not found";
 
-    const saveStmt = db.query<void, { namespace: string; url: string | null }>(
-      "INSERT OR IGNORE INTO icons (namespace, url) VALUES ($namespace, $url)"
-    );
-
     if (res?.status() === 200) {
-      const el = await page.waitForSelector('[data-testid="repository-logo"]', {
-        timeout: 5_000
-      });
-      if (el) {
+      try {
+        const el = await page.waitForSelector(
+          '[data-testid="repository-logo"]',
+          {
+            timeout: 5_000
+          }
+        );
         imageSrc = await el.getAttribute("src");
-      } else {
+      } catch {
         message = `Page ${dockerHubURL} does not have an associated image`;
-        saveStmt.all({
-          namespace: parsedImage.namespace,
-          url: null
-        });
       }
     } else {
       message = `Image \`${parsedImage.namespace}/${parsedImage.repository}\` does not exist on Docker Hub`;
     }
 
-    await browser.close();
+    await Promise.all([
+      browser.close(),
+      sql`
+	     INSERT INTO icons (namespace, url)
+  	     VALUES (${parsedImage.namespace}, ${imageSrc})
+  	     ON CONFLICT (namespace) DO NOTHING
+  	  `
+    ]);
 
     if (!imageSrc) {
       return Response.json(
@@ -119,11 +126,6 @@ const server = Bun.serve({
         }
       );
     }
-
-    saveStmt.all({
-      namespace: parsedImage.namespace,
-      url: imageSrc
-    });
 
     return fetch(imageSrc);
   }
