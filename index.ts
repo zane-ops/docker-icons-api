@@ -64,7 +64,7 @@ const server = Bun.serve({
 
     if (!parsedImage.namespace || parsedImage.namespace === "library") {
       return fetch(
-        `https://raw.githubusercontent.com/docker-library/docs/refs/heads/master/${parsedImage.repository}/logo.png`
+        `https://hub.docker.com/api/media/repos_logo/v1/library%2F${parsedImage.repository}?type=logo`
       );
     }
 
