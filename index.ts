@@ -19,7 +19,7 @@ function parseDockerHubImage(
 }
 
 const server = Bun.serve({
-  port: 8936,
+  port: import.meta.env.PORT ?? 8936,
   async fetch(req) {
     if (req.method !== "GET") {
       return new Response("Method Not Allowed", {
