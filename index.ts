@@ -33,7 +33,7 @@ const server = Bun.serve({
 
     using db = new Database("db.sqlite", { create: true, strict: true });
     db.run(`
-  CREATE TABLE IF NOT EXISTS docker_thumbnails (
+  CREATE TABLE IF NOT EXISTS icons (
     namespace TEXT PRIMARY KEY,
     url TEXT
   )
@@ -71,7 +71,7 @@ const server = Bun.serve({
     // Check DB for existing thumbnail
     const existingThumbnail = db
       .query<{ url: string }, { namespace: string }>(
-        "SELECT url FROM docker_thumbnails WHERE namespace = $namespace LIMIT 1"
+        "SELECT url FROM icons WHERE namespace = $namespace LIMIT 1"
       )
       .get({
         namespace: parsedImage.namespace
@@ -89,7 +89,7 @@ const server = Bun.serve({
     let message = "Not found";
 
     const saveStmt = db.query<void, { namespace: string; url: string | null }>(
-      "INSERT OR IGNORE INTO docker_thumbnails (namespace, url) VALUES ($namespace, $url)"
+      "INSERT OR IGNORE INTO icons (namespace, url) VALUES ($namespace, $url)"
     );
 
     if (res?.status() === 200) {
