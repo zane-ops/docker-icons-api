@@ -6,7 +6,14 @@
   "devDependencies": {
     "@types/bun": "latest"
   },
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "postinstall": "playwright install chromium"
+  },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
   }
 }
