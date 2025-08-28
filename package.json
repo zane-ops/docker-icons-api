@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "bun run --watch index.ts",
-    "postinstall": "playwright install-deps && playwright install chromium"
+    "start": "bun run index.ts",
+    "prestart": "playwright install-deps && playwright install chromium"
   },
   "peerDependencies": {
     "typescript": "^5"
