@@ -89,7 +89,9 @@ const server = Bun.serve({
         return new Response(row[1], {
           headers: {
             "Content-Type": row[2] ?? "image/png",
-            "Cache-Control": "public, max-age=86400" // serve cached for 1 day
+            // cache for one day and serve stale for 7 days
+            "Cache-Control":
+              "public, max-age=86400, stale-while-revalidate=604800"
           }
         });
       }
@@ -156,7 +158,8 @@ const server = Bun.serve({
     return new Response(buf, {
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, max-age=86400" // 1 day cache
+        // cache for one day and serve stale for 7 days
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"
       }
     });
   }
