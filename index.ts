@@ -50,14 +50,14 @@ const server = Bun.serve({
       return Response.json({ ok: true });
     }
 
-    const image = url.searchParams.get("image");
+    const regex =
+      /^(?:([a-z0-9]+(?:[_-][a-z0-9]+)*)\/)?([a-z0-9]+(?:[_-][a-z0-9]+)*)\.png$/;
 
-    if (!image) {
-      return Response.json(
-        { message: "`image` parameter is required" },
-        { status: 400 }
-      );
+    if (!url.pathname.substring(1).match(regex)) {
+      return Response.json({ message: "page not found" }, { status: 404 });
     }
+
+    const image = url.pathname.substring(1);
 
     const parsedImage = parseDockerHubImage(image);
     if (!parsedImage) {
