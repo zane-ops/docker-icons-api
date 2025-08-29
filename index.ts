@@ -5,7 +5,7 @@ function parseDockerHubImage(
   image: string
 ): { namespace: string | null; repository: string } | null {
   const regex =
-    /^(?:([a-z0-9]+(?:[._-][a-z0-9]+)*)\/)?([a-z0-9]+(?:[._-][a-z0-9]+)*)$/;
+    /^(?:([a-z0-9]+(?:[_-][a-z0-9]+)*)\/)?([a-z0-9]+(?:[_-][a-z0-9]+)*)\.png$/;
   const match = image.match(regex);
 
   if (!match) return null;
