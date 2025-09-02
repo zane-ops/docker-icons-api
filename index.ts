@@ -46,8 +46,8 @@ const server = Bun.serve({
     const url = new URL(req.url);
 
     if (url.pathname === "/health") {
-      await sql`SELECT 1`.values();
-      return Response.json({ ok: true });
+      const res = await sql`SELECT true`.values();
+      return Response.json({ ok: res[0][0] });
     }
 
     const regex =
