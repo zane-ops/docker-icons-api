@@ -12,7 +12,7 @@ API used for providing the icons for docker images in ZaneOps:
 
 To start:
 
-```bash
+```shell
 # start the database with docker-compose
 docker-compose up -d  
 
