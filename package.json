@@ -9,7 +9,7 @@
 	"scripts": {
 		"dev": "bun run --watch index.ts",
 		"start": "bun run index.ts",
-		"prestart": "playwright install-deps && playwright install chromium"
+		"predev": "playwright install-deps && playwright install chromium"
 	},
 	"peerDependencies": {
 		"typescript": "^5"
