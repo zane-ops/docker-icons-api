@@ -31,7 +31,6 @@ RUN bun install --frozen-lockfile
 # runtime
 FROM base AS runtime
 COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=base /root/.cache/ms-playwright /root/.cache/ms-playwright
 COPY . .
 
 ARG HOST=0.0.0.0
