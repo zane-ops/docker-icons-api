@@ -20,11 +20,11 @@ RUN apt update && apt install -y libglib2.0-0 \
     libnss3 
 
 
-RUN bunx playwright install chromium --only-shell
-
 # install dependencies
 FROM base AS prod-deps
 COPY ./package.json ./bun.lock ./
+
+RUN bunx playwright install chromium --only-shell
 
 RUN bun install --frozen-lockfile
 
